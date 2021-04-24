@@ -9,6 +9,7 @@ import (
 type IntList struct {
 	head   *intNode
 	length int
+	mu     sync.Mutex
 }
 
 type intNode struct {
@@ -37,7 +38,7 @@ func (n *intNode) storeNext(node *intNode) {
 func (l *IntList) Insert(value int) bool {
 	for {
 		a := l.head
-		b := a.next
+		b := a.loadNext()
 		for b != nil && b.value < value {
 			a = b
 			b = b.loadNext()
@@ -56,6 +57,8 @@ func (l *IntList) Insert(value int) bool {
 		x := newIntNode(value)
 		x.storeNext(b)
 		a.storeNext(x)
+		l.mu.Lock()
+		defer l.mu.Unlock()
 		l.length++
 		break
 	}
@@ -91,6 +94,8 @@ func (l *IntList) Delete(value int) bool {
 		defer b.mu.Unlock()
 		b.marked = true
 		a.storeNext(b.loadNext())
+		l.mu.Lock()
+		defer l.mu.Unlock()
 		l.length--
 		break
 	}
@@ -98,14 +103,14 @@ func (l *IntList) Delete(value int) bool {
 }
 
 func (l *IntList) Contains(value int) bool {
-	x := l.head.next
+	x := l.head.loadNext()
 	for x != nil && x.value < value {
 		x = x.loadNext()
 	}
 	if x == nil {
 		return false
 	}
-	return (x.value == value) && x.marked
+	return (x.value == value) && !x.marked
 }
 
 func (l *IntList) Range(f func(value int) bool) {

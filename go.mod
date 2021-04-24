@@ -1,3 +1,3 @@
-module mypj/concurrList
+module github.com/clist
 
-go 1.14
+go 1.12

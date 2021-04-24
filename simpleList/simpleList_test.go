@@ -24,6 +24,7 @@ func TestIntSet(t *testing.T) {
 	if l.Len() != 0 {
 		t.Fatal("invalid length")
 	}
+
 	if l.Contains(0) {
 		t.Fatal("invalid contains")
 	}
@@ -34,6 +35,7 @@ func TestIntSet(t *testing.T) {
 	if !l.Insert(0) || l.Len() != 1 {
 		t.Fatal("invalid insert")
 	}
+
 	if !l.Contains(0) {
 		t.Fatal("invalid contains")
 	}
