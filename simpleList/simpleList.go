@@ -2,11 +2,13 @@ package simpleList
 
 import (
 	"sync"
+	"sync/atomic"
+	"unsafe"
 )
 
 type IntList struct {
 	head   *intNode
-	length int64
+	length int
 }
 
 type intNode struct {
@@ -24,13 +26,21 @@ func NewInt() *IntList {
 	return &IntList{head: newIntNode(0)}
 }
 
+func (n *intNode) loadNext() *intNode {
+	return (*intNode)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&n.next))))
+}
+
+func (n *intNode) storeNext(node *intNode) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&n.next)), unsafe.Pointer(node))
+}
+
 func (l *IntList) Insert(value int) bool {
 	for {
 		a := l.head
 		b := a.next
 		for b != nil && b.value < value {
 			a = b
-			b = b.next
+			b = b.loadNext()
 		}
 		// Check if the node is exist.
 		if b != nil && b.value == value {
@@ -44,8 +54,8 @@ func (l *IntList) Insert(value int) bool {
 		}
 		defer a.mu.Unlock()
 		x := newIntNode(value)
-		x.next = b
-		a.next = x
+		x.storeNext(b)
+		a.storeNext(x)
 		l.length++
 		break
 	}
@@ -58,7 +68,7 @@ func (l *IntList) Delete(value int) bool {
 		b := a.next
 		for b != nil && b.value < value {
 			a = b
-			b = b.next
+			b = b.loadNext()
 		}
 		// Check if b is not exists
 		if b == nil || b.value != value {
@@ -80,7 +90,7 @@ func (l *IntList) Delete(value int) bool {
 		defer a.mu.Unlock()
 		defer b.mu.Unlock()
 		b.marked = true
-		a.next = b.next
+		a.storeNext(b.loadNext())
 		l.length--
 		break
 	}
@@ -90,7 +100,7 @@ func (l *IntList) Delete(value int) bool {
 func (l *IntList) Contains(value int) bool {
 	x := l.head.next
 	for x != nil && x.value < value {
-		x = x.next
+		x = x.loadNext()
 	}
 	if x == nil {
 		return false
