@@ -8,15 +8,14 @@ import (
 
 type IntList struct {
 	head   *intNode
-	length int
-	mu     sync.Mutex
+	length int64
 }
 
 type intNode struct {
 	value  int
 	next   *intNode
-	marked bool
-	mu     sync.RWMutex
+	marked int64
+	mu     sync.Mutex
 }
 
 func newIntNode(value int) *intNode {
@@ -49,7 +48,7 @@ func (l *IntList) Insert(value int) bool {
 		}
 		// lock A and check if A.next!= B or A.marked, if true, unlock A and continue.
 		a.mu.Lock()
-		if a.next != b || a.marked {
+		if a.next != b || a.marked == 1 {
 			a.mu.Unlock()
 			continue
 		}
@@ -57,9 +56,7 @@ func (l *IntList) Insert(value int) bool {
 		x := newIntNode(value)
 		x.storeNext(b)
 		a.storeNext(x)
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.length++
+		atomic.AddInt64(&l.length, 1)
 		break
 	}
 	return true
@@ -68,7 +65,7 @@ func (l *IntList) Insert(value int) bool {
 func (l *IntList) Delete(value int) bool {
 	for {
 		a := l.head
-		b := a.next
+		b := a.loadNext()
 		for b != nil && b.value < value {
 			a = b
 			b = b.loadNext()
@@ -79,24 +76,22 @@ func (l *IntList) Delete(value int) bool {
 		}
 		// Lock B and check if B.marked is true, then continue
 		b.mu.Lock()
-		if b.marked {
+		if b.marked == 1 {
 			b.mu.Unlock()
 			continue
 		}
 		// Lock A and check if A.marked is true or A.next != B, then continue
 		a.mu.Lock()
-		if a.marked || a.next != b {
+		if a.marked == 1 || a.next != b {
 			a.mu.Unlock()
 			b.mu.Unlock()
 			continue
 		}
 		defer a.mu.Unlock()
 		defer b.mu.Unlock()
-		b.marked = true
+		atomic.StoreInt64(&b.marked, 1)
 		a.storeNext(b.loadNext())
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		l.length--
+		atomic.AddInt64(&l.length, -1)
 		break
 	}
 	return true
@@ -110,16 +105,16 @@ func (l *IntList) Contains(value int) bool {
 	if x == nil {
 		return false
 	}
-	return (x.value == value) && !x.marked
+	return (x.value == value) && atomic.LoadInt64(&x.marked) == 0
 }
 
 func (l *IntList) Range(f func(value int) bool) {
-	x := l.head.next
+	x := l.head.loadNext()
 	for x != nil {
 		if !f(x.value) {
 			break
 		}
-		x = x.next
+		x = x.loadNext()
 	}
 }
 
